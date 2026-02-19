@@ -70,6 +70,104 @@ npm start
 2. Click **Analyze VOD**
 3. Review duration, average RMS, peak, and issue counts
 
+## Settings Guide
+
+This app checks audio in small chunks and classifies each chunk as:
+
+- **ok** = healthy audio
+- **low** = audible but quiet
+- **silent** = very quiet / effectively no audio
+- **clipping** = too loud / distorted peak
+
+Then it applies timing rules to decide when to raise alerts.
+
+---
+
+### 1) Level thresholds (how audio is classified)
+
+These settings decide what counts as low/silent/clipping.
+
+- **Silence RMS (dB)** (default: `-50`)
+  - If RMS is at or below this, status becomes **silent**.
+  - Move closer to 0 (for example `-45`) to detect silence sooner.
+  - Move lower (for example `-55`) to be less sensitive to silence.
+
+- **Low RMS (dB)** (default: `-30`)
+  - If RMS is at or below this (but not silent), status becomes **low**.
+  - Move closer to 0 (for example `-25`) to detect quiet audio sooner.
+  - Move lower (for example `-35`) to reduce low-volume warnings.
+
+- **Clipping Peak (dB)** (default: `-1`)
+  - If peak reaches or exceeds this, status becomes **clipping**.
+  - Lowering this to `-2` makes clipping detection stricter.
+  - Raising toward `0` makes clipping alerts less frequent.
+
+---
+
+### 2) Analysis speed
+
+- **Window (ms)** (default: `500`)
+  - Audio is analyzed once per window.
+  - `500 ms` means ~2 checks per second.
+  - Smaller window = faster reaction, but can be noisier.
+  - Larger window = smoother behavior, but slower reaction.
+
+---
+
+### 3) Alert timing rules (when alerts are fired)
+
+These settings control when the app turns status changes into alerts.
+
+- **Silence min sec** (default: `3`)
+  - Silent status must continue for this many seconds before a **silent alert** is sent.
+
+- **Low min sec** (default: `5`)
+  - Low status must continue for this many seconds before a **low alert** is sent.
+
+- **Clipping hits** (default: `3`)
+  - Clipping status must appear this many consecutive analysis windows before a **clipping alert** is sent.
+  - With `windowMs = 500`, `3` hits is about `1.5s`.
+
+- **Recovery sec** (default: `2`)
+  - After being in a problem state (silent/low/clipping), audio must stay **ok** for this long before a **recovered alert** is sent.
+
+- **Cooldown sec** (default: `30`)
+  - Minimum time between repeated alerts of the **same type** (`silent`, `low`, `clipping`).
+  - Prevents spam during ongoing problems.
+  - Cooldown is tracked per type (silent has its own timer, low its own, clipping its own).
+
+---
+
+### 4) Twitch chat alert settings
+
+In Live Monitor you can also control chat behavior:
+
+- **Twitch chat alerts**: enable/disable sending alerts to chat
+- **Chat channel**: where bot messages go (defaults to monitored channel)
+- **Twitch alert types**: choose which alert types can be posted (`Silent`, `Low`, `Clipping`, `Recovered`)
+
+Dashboard alerts still appear even if chat alerts are disabled.
+
+---
+
+### 5) Easy starter presets
+
+If you are new, start with one of these:
+
+- **Balanced (recommended)**
+  - Keep defaults.
+
+- **Less noisy (fewer alerts)**
+  - Increase `silenceMinSec`, `lowMinSec`, and `cooldownSec`.
+  - Optionally lower sensitivity by moving `silenceRmsDb` and `lowRmsDb` down.
+
+- **More sensitive (catch issues fast)**
+  - Decrease `silenceMinSec` and `lowMinSec`.
+  - Decrease `clippingHits`.
+  - Optionally increase sensitivity by moving `silenceRmsDb` and `lowRmsDb` closer to 0.
+
+Tip: change one setting at a time and test for a few minutes before adjusting more.
+
 ## Notes
 
 - `streamlink` is used to resolve Twitch stream/VOD media URLs.
