@@ -7,9 +7,15 @@ const { WebSocketServer } = require("ws");
 
 const { AudioAnalyzer, DEFAULT_ANALYSIS_SETTINGS } = require("./audio/analyzer");
 const { startFfmpegPcmStream, DEFAULT_SAMPLE_RATE } = require("./audio/ffmpegRunner");
-const { resolveLiveStreamUrl, resolveVodStreamUrl } = require("./twitch");
+const {
+  isChannelLive,
+  normalizeChannelName,
+  resolveLiveStreamUrl,
+  resolveVodStreamUrl,
+} = require("./twitch");
 const { AlertEngine, DEFAULT_ALERT_SETTINGS } = require("./alerts/rules");
 const { Notifier } = require("./alerts/notifier");
+const { SettingsStore } = require("./settingsStore");
 
 const app = express();
 app.use(express.json());
@@ -18,11 +24,15 @@ app.use(express.static(path.join(__dirname, "..", "public")));
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 const notifier = new Notifier({ wss, env: process.env });
+const settingsStore = new SettingsStore();
 
 const PORT = Number(process.env.PORT || 3030);
 const ALERT_TYPES = ["silent", "low", "clipping", "recovered"];
 
 let liveSession = null;
+let autoMonitorTimer = null;
+let autoCheckInProgress = false;
+let nextSessionId = 1;
 
 function num(value, fallback) {
   const parsed = Number(value);
@@ -90,15 +100,202 @@ function summarize(metrics, alerts) {
   };
 }
 
-function stopLiveSession() {
+function buildLiveConfig(body = {}) {
+  const saved = settingsStore.get();
+  const settings = body.settings || {};
+  const alerts = body.alerts || {};
+
+  const channel = normalizeChannelName(body.channel || saved.live.channel);
+  const quality = String(body.quality || saved.live.quality || "best").trim() || "best";
+  const analysisSettings = mergeAnalysisSettings({ ...saved.analysis, ...settings });
+  const alertSettings = mergeAlertSettings({ ...saved.alertRules, ...settings });
+  const chatEnabled =
+    typeof alerts.chatEnabled === "boolean" ? alerts.chatEnabled : Boolean(saved.chat.enabled);
+  const chatChannel = normalizeChannelName(alerts.chatChannel || saved.chat.channel || channel);
+  const enabledTypes = normalizeAlertTypeSettings(alerts.enabledTypes || saved.chat.enabledTypes);
+
+  return {
+    channel,
+    quality,
+    analysisSettings,
+    alertSettings,
+    chatEnabled,
+    chatChannel,
+    enabledTypes,
+  };
+}
+
+function buildVodConfig(body = {}) {
+  const saved = settingsStore.get();
+  const settings = body.settings || {};
+
+  return {
+    quality: String(body.quality || "best").trim() || "best",
+    analysisSettings: mergeAnalysisSettings({ ...saved.analysis, ...settings }),
+    alertSettings: mergeAlertSettings({ ...saved.alertRules, ...settings }),
+  };
+}
+
+function persistLiveConfig(config) {
+  settingsStore.update({
+    live: {
+      channel: config.channel,
+      quality: config.quality,
+    },
+    analysis: config.analysisSettings,
+    alertRules: config.alertSettings,
+    chat: {
+      enabled: config.chatEnabled,
+      channel: config.chatChannel,
+      enabledTypes: config.enabledTypes,
+    },
+  });
+}
+
+function stopLiveSession({ reason = "manual", initiatedBy = "manual" } = {}) {
   if (!liveSession) return;
-  liveSession.runner.stop();
+
+  const session = liveSession;
+  liveSession = null;
+  session.runner.stop();
+
   notifier.broadcast("session", {
     state: "stopped",
     sourceType: "live",
-    channel: liveSession.channel,
+    channel: session.channel,
+    reason,
+    initiatedBy,
   });
-  liveSession = null;
+}
+
+async function startLiveSession(config, { initiatedBy = "manual" } = {}) {
+  if (!config.channel) {
+    throw new Error("channel is required");
+  }
+
+  if (liveSession) stopLiveSession({ reason: "replaced", initiatedBy });
+
+  const resolved = await resolveLiveStreamUrl(config.channel, config.quality);
+  const analyzer = new AudioAnalyzer(config.analysisSettings);
+  const alertEngine = new AlertEngine(config.alertSettings);
+  const sessionId = nextSessionId;
+  nextSessionId += 1;
+
+  const runner = startFfmpegPcmStream({
+    inputUrl: resolved.streamUrl,
+    sampleRate: config.analysisSettings.sampleRate,
+    onSamples: async (samples) => {
+      const metrics = analyzer.processSamples(samples);
+      for (const metric of metrics) {
+        notifier.broadcast("metric", metric);
+        const newAlerts = alertEngine.processMetric(metric);
+        for (const alert of newAlerts) {
+          await notifier.notifyAlert(alert, {
+            chatEnabled: config.chatEnabled,
+            chatChannel: config.chatChannel,
+            enabledTypes: config.enabledTypes,
+          });
+        }
+      }
+    },
+    onError: (error) => {
+      if (!liveSession || liveSession.id !== sessionId) return;
+      notifier.broadcast("system", { level: "error", message: error.message });
+      stopLiveSession({ reason: "ingest-error", initiatedBy: "system" });
+    },
+    onEnd: ({ stopped }) => {
+      if (!liveSession || liveSession.id !== sessionId) return;
+
+      if (!stopped) {
+        notifier.broadcast("system", {
+          level: "warn",
+          message: "Live ingest ended unexpectedly",
+        });
+      }
+      stopLiveSession({ reason: stopped ? "manual" : "ingest-ended", initiatedBy: "system" });
+    },
+  });
+
+  liveSession = {
+    id: sessionId,
+    channel: config.channel,
+    quality: config.quality,
+    startedAt: Date.now(),
+    initiatedBy,
+    runner,
+  };
+
+  notifier.broadcast("session", {
+    state: "started",
+    sourceType: "live",
+    channel: config.channel,
+    initiatedBy,
+  });
+
+  return {
+    source: resolved,
+    analysisSettings: config.analysisSettings,
+    alertSettings: config.alertSettings,
+    chatEnabled: config.chatEnabled,
+    chatChannel: config.chatChannel,
+    enabledTypes: config.enabledTypes,
+  };
+}
+
+async function runAutoMonitorCheck() {
+  if (autoCheckInProgress) return;
+
+  const settings = settingsStore.get();
+  if (!settings.autoMonitor.enabled) return;
+  if (!settings.live.channel) return;
+
+  autoCheckInProgress = true;
+  try {
+    const channel = settings.live.channel;
+    const quality = settings.live.quality || "best";
+    const online = await isChannelLive(channel, quality);
+
+    if (online && !liveSession) {
+      notifier.broadcast("system", {
+        level: "info",
+        message: `Auto-monitor detected ${channel} is live. Starting monitoring.`,
+      });
+
+      const config = buildLiveConfig({ channel, quality });
+      await startLiveSession(config, { initiatedBy: "auto" });
+      return;
+    }
+
+    if (!online && liveSession && liveSession.channel === channel) {
+      notifier.broadcast("system", {
+        level: "warn",
+        message: `${channel} appears offline. Stopping monitoring.`,
+      });
+      stopLiveSession({ reason: "stream-offline", initiatedBy: "auto" });
+    }
+  } catch (error) {
+    notifier.broadcast("system", {
+      level: "warn",
+      message: `Auto-monitor check failed: ${error.message}`,
+    });
+  } finally {
+    autoCheckInProgress = false;
+  }
+}
+
+function restartAutoMonitor() {
+  if (autoMonitorTimer) {
+    clearInterval(autoMonitorTimer);
+    autoMonitorTimer = null;
+  }
+
+  const settings = settingsStore.get();
+  if (!settings.autoMonitor.enabled) return;
+
+  const intervalMs = Math.max(15, Number(settings.autoMonitor.intervalSec || 45)) * 1000;
+  autoMonitorTimer = setInterval(runAutoMonitorCheck, intervalMs);
+
+  runAutoMonitorCheck();
 }
 
 wss.on("connection", (socket) => {
@@ -112,94 +309,58 @@ wss.on("connection", (socket) => {
 });
 
 app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, liveActive: Boolean(liveSession) });
+  const settings = settingsStore.get();
+  res.json({
+    ok: true,
+    liveActive: Boolean(liveSession),
+    autoMonitorEnabled: settings.autoMonitor.enabled,
+    channel: settings.live.channel,
+  });
+});
+
+app.get("/api/settings", (_req, res) => {
+  res.json({ ok: true, settings: settingsStore.get() });
+});
+
+app.post("/api/settings", (req, res) => {
+  const next = settingsStore.update(req.body || {});
+  restartAutoMonitor();
+  res.json({ ok: true, settings: next });
 });
 
 app.post("/api/live/start", async (req, res) => {
   try {
-    const { channel, quality = "best", settings = {}, alerts = {} } = req.body || {};
-    if (!channel) {
+    const config = buildLiveConfig(req.body || {});
+    if (!config.channel) {
       return res.status(400).json({ error: "channel is required" });
     }
 
-    if (liveSession) stopLiveSession();
+    persistLiveConfig(config);
+    restartAutoMonitor();
 
-    const resolved = await resolveLiveStreamUrl(channel, quality);
-    const analysisSettings = mergeAnalysisSettings(settings);
-    const alertSettings = mergeAlertSettings(settings);
-
-    const analyzer = new AudioAnalyzer(analysisSettings);
-    const alertEngine = new AlertEngine(alertSettings);
-    const chatEnabled = Boolean(alerts.chatEnabled);
-    const chatChannel = String(alerts.chatChannel || channel).replace(/^@/, "").trim();
-    const enabledTypes = normalizeAlertTypeSettings(alerts.enabledTypes);
-
-    const runner = startFfmpegPcmStream({
-      inputUrl: resolved.streamUrl,
-      sampleRate: analysisSettings.sampleRate,
-      onSamples: async (samples) => {
-        const metrics = analyzer.processSamples(samples);
-        for (const metric of metrics) {
-          notifier.broadcast("metric", metric);
-          const newAlerts = alertEngine.processMetric(metric);
-          for (const alert of newAlerts) {
-            await notifier.notifyAlert(alert, {
-              chatEnabled,
-              chatChannel,
-              enabledTypes,
-            });
-          }
-        }
-      },
-      onError: (error) => {
-        notifier.broadcast("system", { level: "error", message: error.message });
-        stopLiveSession();
-      },
-      onEnd: ({ stopped }) => {
-        if (!stopped) {
-          notifier.broadcast("system", {
-            level: "warn",
-            message: "Live ingest ended unexpectedly",
-          });
-        }
-        stopLiveSession();
-      },
-    });
-
-    liveSession = { channel, runner, startedAt: Date.now() };
-    notifier.broadcast("session", { state: "started", sourceType: "live", channel });
-
-    return res.json({
-      ok: true,
-      source: resolved,
-      analysisSettings,
-      alertSettings,
-      chatEnabled,
-      chatChannel,
-      enabledTypes,
-    });
+    const data = await startLiveSession(config, { initiatedBy: "manual" });
+    return res.json({ ok: true, ...data });
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
 });
 
 app.post("/api/live/stop", (_req, res) => {
-  stopLiveSession();
+  stopLiveSession({ reason: "manual", initiatedBy: "manual" });
   res.json({ ok: true });
 });
 
 app.post("/api/vod/analyze", async (req, res) => {
   try {
-    const { vodUrl, quality = "best", settings = {} } = req.body || {};
+    const { vodUrl } = req.body || {};
     if (!vodUrl) {
       return res.status(400).json({ error: "vodUrl is required" });
     }
 
-    const resolved = await resolveVodStreamUrl(vodUrl, quality);
-    const analysisSettings = mergeAnalysisSettings(settings);
-    const alertSettings = mergeAlertSettings(settings);
-    const analyzer = new AudioAnalyzer(analysisSettings);
-    const alertEngine = new AlertEngine(alertSettings);
+    const config = buildVodConfig(req.body || {});
+    const resolved = await resolveVodStreamUrl(vodUrl, config.quality);
+    const analyzer = new AudioAnalyzer(config.analysisSettings);
+    const alertEngine = new AlertEngine(config.alertSettings);
 
     const metrics = [];
     const alerts = [];
@@ -207,7 +368,7 @@ app.post("/api/vod/analyze", async (req, res) => {
     await new Promise((resolve, reject) => {
       startFfmpegPcmStream({
         inputUrl: resolved.streamUrl,
-        sampleRate: analysisSettings.sampleRate,
+        sampleRate: config.analysisSettings.sampleRate,
         onSamples: (samples) => {
           const nextMetrics = analyzer.processSamples(samples);
           for (const metric of nextMetrics) {
@@ -231,6 +392,8 @@ app.post("/api/vod/analyze", async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
 });
+
+restartAutoMonitor();
 
 server.listen(PORT, () => {
   // eslint-disable-next-line no-console

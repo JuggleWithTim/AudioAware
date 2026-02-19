@@ -7,6 +7,9 @@ const els = {
   alertTypeLow: document.getElementById("alertTypeLow"),
   alertTypeClipping: document.getElementById("alertTypeClipping"),
   alertTypeRecovered: document.getElementById("alertTypeRecovered"),
+  autoMonitorEnabled: document.getElementById("autoMonitorEnabled"),
+  autoMonitorIntervalSec: document.getElementById("autoMonitorIntervalSec"),
+  saveSettingsBtn: document.getElementById("saveSettingsBtn"),
   startLiveBtn: document.getElementById("startLiveBtn"),
   stopLiveBtn: document.getElementById("stopLiveBtn"),
   vodUrl: document.getElementById("vodUrl"),
@@ -21,8 +24,6 @@ const els = {
   systemLog: document.getElementById("systemLog"),
   vodSummary: document.getElementById("vodSummary"),
 };
-
-const CHAT_ALERT_PREFS_KEY = "audioaware.chatAlertPrefs.v1";
 
 const settingIds = [
   "silenceRmsDb",
@@ -89,26 +90,9 @@ function getEnabledAlertTypes() {
   };
 }
 
-function saveChatAlertPrefs() {
-  try {
-    const payload = {
-      chatEnabled: els.chatEnabled.checked,
-      chatChannel: els.chatChannel.value.trim(),
-      enabledTypes: getEnabledAlertTypes(),
-    };
-    window.localStorage.setItem(CHAT_ALERT_PREFS_KEY, JSON.stringify(payload));
-  } catch (_error) {
-    // ignore localStorage issues
-  }
-}
-
 function applyEnabledTypes(enabledTypes = {}) {
-  if (typeof enabledTypes.silent === "boolean") {
-    els.alertTypeSilent.checked = enabledTypes.silent;
-  }
-  if (typeof enabledTypes.low === "boolean") {
-    els.alertTypeLow.checked = enabledTypes.low;
-  }
+  if (typeof enabledTypes.silent === "boolean") els.alertTypeSilent.checked = enabledTypes.silent;
+  if (typeof enabledTypes.low === "boolean") els.alertTypeLow.checked = enabledTypes.low;
   if (typeof enabledTypes.clipping === "boolean") {
     els.alertTypeClipping.checked = enabledTypes.clipping;
   }
@@ -117,36 +101,120 @@ function applyEnabledTypes(enabledTypes = {}) {
   }
 }
 
-function loadChatAlertPrefs() {
-  try {
-    const raw = window.localStorage.getItem(CHAT_ALERT_PREFS_KEY);
-    if (!raw) return;
-    const parsed = JSON.parse(raw);
-
-    if (typeof parsed.chatEnabled === "boolean") {
-      els.chatEnabled.checked = parsed.chatEnabled;
-    }
-    if (typeof parsed.chatChannel === "string") {
-      els.chatChannel.value = parsed.chatChannel;
-    }
-    applyEnabledTypes(parsed.enabledTypes);
-  } catch (_error) {
-    // ignore malformed localStorage data
+function setNumericValue(id, value) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    el.value = String(value);
   }
 }
 
-async function apiPost(path, body) {
-  const res = await fetch(path, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body || {}),
-  });
+function buildPersistedSettingsPayload() {
+  const s = getSettings();
 
+  return {
+    live: {
+      channel: els.liveChannel.value.trim(),
+      quality: els.liveQuality.value.trim() || "best",
+    },
+    analysis: {
+      silenceRmsDb: s.silenceRmsDb,
+      lowRmsDb: s.lowRmsDb,
+      clipPeakDb: s.clipPeakDb,
+      windowMs: s.windowMs,
+    },
+    alertRules: {
+      silenceMinSec: s.silenceMinSec,
+      lowMinSec: s.lowMinSec,
+      clippingHits: s.clippingHits,
+      recoverySec: s.recoverySec,
+      cooldownSec: s.cooldownSec,
+    },
+    chat: {
+      enabled: els.chatEnabled.checked,
+      channel: els.chatChannel.value.trim(),
+      enabledTypes: getEnabledAlertTypes(),
+    },
+    autoMonitor: {
+      enabled: els.autoMonitorEnabled.checked,
+      intervalSec: Number(els.autoMonitorIntervalSec.value || 45),
+    },
+  };
+}
+
+function applyServerSettings(settings = {}) {
+  if (settings.live) {
+    if (typeof settings.live.channel === "string") els.liveChannel.value = settings.live.channel;
+    if (typeof settings.live.quality === "string") els.liveQuality.value = settings.live.quality;
+  }
+
+  if (settings.analysis) {
+    setNumericValue("silenceRmsDb", settings.analysis.silenceRmsDb);
+    setNumericValue("lowRmsDb", settings.analysis.lowRmsDb);
+    setNumericValue("clipPeakDb", settings.analysis.clipPeakDb);
+    setNumericValue("windowMs", settings.analysis.windowMs);
+  }
+
+  if (settings.alertRules) {
+    setNumericValue("silenceMinSec", settings.alertRules.silenceMinSec);
+    setNumericValue("lowMinSec", settings.alertRules.lowMinSec);
+    setNumericValue("clippingHits", settings.alertRules.clippingHits);
+    setNumericValue("recoverySec", settings.alertRules.recoverySec);
+    setNumericValue("cooldownSec", settings.alertRules.cooldownSec);
+  }
+
+  if (settings.chat) {
+    if (typeof settings.chat.enabled === "boolean") els.chatEnabled.checked = settings.chat.enabled;
+    if (typeof settings.chat.channel === "string") els.chatChannel.value = settings.chat.channel;
+    applyEnabledTypes(settings.chat.enabledTypes);
+  }
+
+  if (settings.autoMonitor) {
+    if (typeof settings.autoMonitor.enabled === "boolean") {
+      els.autoMonitorEnabled.checked = settings.autoMonitor.enabled;
+    }
+    if (typeof settings.autoMonitor.intervalSec === "number") {
+      els.autoMonitorIntervalSec.value = String(settings.autoMonitor.intervalSec);
+    }
+  }
+}
+
+async function api(path, options = {}) {
+  const res = await fetch(path, options);
   const data = await res.json();
   if (!res.ok) {
     throw new Error(data.error || `Request failed: ${res.status}`);
   }
   return data;
+}
+
+async function apiPost(path, body) {
+  return api(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+}
+
+async function loadSettings() {
+  try {
+    const data = await api("/api/settings");
+    applyServerSettings(data.settings);
+    appendSystem("Loaded settings from server");
+  } catch (error) {
+    appendSystem(`Failed to load settings: ${error.message}`, "warn");
+  }
+}
+
+async function saveSettings() {
+  try {
+    const payload = buildPersistedSettingsPayload();
+    const data = await apiPost("/api/settings", payload);
+    applyServerSettings(data.settings);
+    appendSystem("Settings saved");
+  } catch (error) {
+    appendSystem(error.message, "error");
+  }
 }
 
 async function startLive() {
@@ -157,6 +225,8 @@ async function startLive() {
   }
 
   try {
+    await saveSettings();
+
     const payload = {
       channel,
       quality: els.liveQuality.value.trim() || "best",
@@ -168,7 +238,6 @@ async function startLive() {
       },
     };
     const data = await apiPost("/api/live/start", payload);
-    saveChatAlertPrefs();
     appendSystem(`Live monitoring started for ${channel}`);
     if (data.chatEnabled) {
       appendSystem(`Twitch chat alerts enabled (${data.chatChannel})`);
@@ -237,7 +306,9 @@ function initSocket() {
       } else if (msg.type === "system") {
         appendSystem(msg.payload.message, msg.payload.level);
       } else if (msg.type === "session") {
-        appendSystem(`Session ${msg.payload.state} (${msg.payload.sourceType})`);
+        const reason = msg.payload.reason ? `, reason: ${msg.payload.reason}` : "";
+        const by = msg.payload.initiatedBy ? `, by: ${msg.payload.initiatedBy}` : "";
+        appendSystem(`Session ${msg.payload.state} (${msg.payload.sourceType}${reason}${by})`);
       }
     } catch (error) {
       appendSystem(`Socket parse error: ${error.message}`, "error");
@@ -251,12 +322,7 @@ function initSocket() {
 els.startLiveBtn.addEventListener("click", startLive);
 els.stopLiveBtn.addEventListener("click", stopLive);
 els.analyzeVodBtn.addEventListener("click", analyzeVod);
-els.chatEnabled.addEventListener("change", saveChatAlertPrefs);
-els.chatChannel.addEventListener("change", saveChatAlertPrefs);
-els.alertTypeSilent.addEventListener("change", saveChatAlertPrefs);
-els.alertTypeLow.addEventListener("change", saveChatAlertPrefs);
-els.alertTypeClipping.addEventListener("change", saveChatAlertPrefs);
-els.alertTypeRecovered.addEventListener("change", saveChatAlertPrefs);
+els.saveSettingsBtn.addEventListener("click", saveSettings);
 
-loadChatAlertPrefs();
+loadSettings();
 initSocket();

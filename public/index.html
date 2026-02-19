@@ -58,6 +58,17 @@
           <button id="startLiveBtn">Start Live Monitoring</button>
           <button id="stopLiveBtn" class="danger">Stop</button>
         </div>
+        <div class="row">
+          <label>
+            Auto-monitor live status
+            <input id="autoMonitorEnabled" type="checkbox" checked />
+          </label>
+          <label>
+            Check interval (sec)
+            <input id="autoMonitorIntervalSec" type="number" value="45" min="15" max="300" />
+          </label>
+          <button id="saveSettingsBtn">Save Settings</button>
+        </div>
       </section>
 
       <section class="card">
