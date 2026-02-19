@@ -10,6 +10,8 @@ AudioAware is a Node.js dashboard for monitoring Twitch audio quality in real ti
 - Visual dashboard alerts
 - Optional Twitch chat alerts from a bot account
 - VOD post-analysis with summary output
+- Persistent settings saved to disk (`data/settings.json` by default)
+- Auto-monitor mode: periodically checks live status and auto start/stops monitoring
 
 ## Tech Stack
 
@@ -63,6 +65,13 @@ npm start
 3. Click **Start Live Monitoring**
 4. Watch status, meter, and alert feed
 5. Click **Stop** when done
+
+If **Auto-monitor live status** is enabled, the server will periodically check if the configured streamer is live:
+
+- when the channel goes live, monitoring starts automatically
+- when the channel goes offline, monitoring stops automatically
+
+Use **Save Settings** to persist channel, thresholds, chat prefs, and auto-monitor settings.
 
 ### VOD analysis
 
@@ -173,3 +182,4 @@ Tip: change one setting at a time and test for a few minutes before adjusting mo
 - `streamlink` is used to resolve Twitch stream/VOD media URLs.
 - If live ingest fails, check local `ffmpeg`/`streamlink` installation first.
 - Twitch chat alerting is optional; dashboard alerting works without bot credentials.
+- Settings are persisted to `data/settings.json` (or `SETTINGS_FILE` if configured).

@@ -75,8 +75,27 @@ async function resolveVodStreamUrl(vodUrl, quality = "best") {
   return { sourceType: "vod", input: raw, streamUrl };
 }
 
+async function isChannelLive(channelOrUrl, quality = "best") {
+  const liveUrl = toTwitchLiveUrl(channelOrUrl);
+
+  try {
+    await runStreamlinkGetStreamUrl(liveUrl, quality);
+    return true;
+  } catch (error) {
+    const message = String(error?.message || "").toLowerCase();
+    const isOffline =
+      message.includes("no playable streams found") ||
+      message.includes("this channel is currently offline") ||
+      message.includes("could not open stream");
+
+    if (isOffline) return false;
+    throw error;
+  }
+}
+
 module.exports = {
   normalizeChannelName,
+  isChannelLive,
   resolveLiveStreamUrl,
   resolveVodStreamUrl,
 };

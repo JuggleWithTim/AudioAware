@@ -17,6 +17,9 @@ dist/
 build/
 coverage/
 
+# Runtime app data
+data/
+
 # OS / editor
 .DS_Store
 Thumbs.db
