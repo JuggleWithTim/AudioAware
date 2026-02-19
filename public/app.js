@@ -3,6 +3,10 @@ const els = {
   liveQuality: document.getElementById("liveQuality"),
   chatEnabled: document.getElementById("chatEnabled"),
   chatChannel: document.getElementById("chatChannel"),
+  alertTypeSilent: document.getElementById("alertTypeSilent"),
+  alertTypeLow: document.getElementById("alertTypeLow"),
+  alertTypeClipping: document.getElementById("alertTypeClipping"),
+  alertTypeRecovered: document.getElementById("alertTypeRecovered"),
   startLiveBtn: document.getElementById("startLiveBtn"),
   stopLiveBtn: document.getElementById("stopLiveBtn"),
   vodUrl: document.getElementById("vodUrl"),
@@ -17,6 +21,8 @@ const els = {
   systemLog: document.getElementById("systemLog"),
   vodSummary: document.getElementById("vodSummary"),
 };
+
+const CHAT_ALERT_PREFS_KEY = "audioaware.chatAlertPrefs.v1";
 
 const settingIds = [
   "silenceRmsDb",
@@ -74,6 +80,61 @@ function appendSystem(message, level = "info") {
   pushListItem(els.systemLog, `[${new Date().toLocaleTimeString()}] (${level}) ${message}`);
 }
 
+function getEnabledAlertTypes() {
+  return {
+    silent: els.alertTypeSilent.checked,
+    low: els.alertTypeLow.checked,
+    clipping: els.alertTypeClipping.checked,
+    recovered: els.alertTypeRecovered.checked,
+  };
+}
+
+function saveChatAlertPrefs() {
+  try {
+    const payload = {
+      chatEnabled: els.chatEnabled.checked,
+      chatChannel: els.chatChannel.value.trim(),
+      enabledTypes: getEnabledAlertTypes(),
+    };
+    window.localStorage.setItem(CHAT_ALERT_PREFS_KEY, JSON.stringify(payload));
+  } catch (_error) {
+    // ignore localStorage issues
+  }
+}
+
+function applyEnabledTypes(enabledTypes = {}) {
+  if (typeof enabledTypes.silent === "boolean") {
+    els.alertTypeSilent.checked = enabledTypes.silent;
+  }
+  if (typeof enabledTypes.low === "boolean") {
+    els.alertTypeLow.checked = enabledTypes.low;
+  }
+  if (typeof enabledTypes.clipping === "boolean") {
+    els.alertTypeClipping.checked = enabledTypes.clipping;
+  }
+  if (typeof enabledTypes.recovered === "boolean") {
+    els.alertTypeRecovered.checked = enabledTypes.recovered;
+  }
+}
+
+function loadChatAlertPrefs() {
+  try {
+    const raw = window.localStorage.getItem(CHAT_ALERT_PREFS_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+
+    if (typeof parsed.chatEnabled === "boolean") {
+      els.chatEnabled.checked = parsed.chatEnabled;
+    }
+    if (typeof parsed.chatChannel === "string") {
+      els.chatChannel.value = parsed.chatChannel;
+    }
+    applyEnabledTypes(parsed.enabledTypes);
+  } catch (_error) {
+    // ignore malformed localStorage data
+  }
+}
+
 async function apiPost(path, body) {
   const res = await fetch(path, {
     method: "POST",
@@ -103,9 +164,11 @@ async function startLive() {
       alerts: {
         chatEnabled: els.chatEnabled.checked,
         chatChannel: els.chatChannel.value.trim(),
+        enabledTypes: getEnabledAlertTypes(),
       },
     };
     const data = await apiPost("/api/live/start", payload);
+    saveChatAlertPrefs();
     appendSystem(`Live monitoring started for ${channel}`);
     if (data.chatEnabled) {
       appendSystem(`Twitch chat alerts enabled (${data.chatChannel})`);
@@ -188,5 +251,12 @@ function initSocket() {
 els.startLiveBtn.addEventListener("click", startLive);
 els.stopLiveBtn.addEventListener("click", stopLive);
 els.analyzeVodBtn.addEventListener("click", analyzeVod);
+els.chatEnabled.addEventListener("change", saveChatAlertPrefs);
+els.chatChannel.addEventListener("change", saveChatAlertPrefs);
+els.alertTypeSilent.addEventListener("change", saveChatAlertPrefs);
+els.alertTypeLow.addEventListener("change", saveChatAlertPrefs);
+els.alertTypeClipping.addEventListener("change", saveChatAlertPrefs);
+els.alertTypeRecovered.addEventListener("change", saveChatAlertPrefs);
 
+loadChatAlertPrefs();
 initSocket();

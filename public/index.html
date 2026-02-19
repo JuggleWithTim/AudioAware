@@ -3,13 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>StreamListen</title>
+    <title>AudioAware</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <main class="container">
       <header>
-        <h1>StreamListen</h1>
+        <h1>AudioAware</h1>
         <p class="subtitle">Live Twitch audio health dashboard</p>
       </header>
 
@@ -32,6 +32,27 @@
             Chat channel
             <input id="chatChannel" type="text" placeholder="defaults to channel" />
           </label>
+        </div>
+        <div class="row">
+          <fieldset class="alert-type-group">
+            <legend>Twitch alert types</legend>
+            <label class="checkbox-inline">
+              <input id="alertTypeSilent" type="checkbox" checked />
+              <span>Silent</span>
+            </label>
+            <label class="checkbox-inline">
+              <input id="alertTypeLow" type="checkbox" checked />
+              <span>Low</span>
+            </label>
+            <label class="checkbox-inline">
+              <input id="alertTypeClipping" type="checkbox" checked />
+              <span>Clipping</span>
+            </label>
+            <label class="checkbox-inline">
+              <input id="alertTypeRecovered" type="checkbox" checked />
+              <span>Recovered</span>
+            </label>
+          </fieldset>
         </div>
         <div class="row">
           <button id="startLiveBtn">Start Live Monitoring</button>

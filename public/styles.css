@@ -52,6 +52,30 @@ h2 {
   align-items: end;
 }
 
+.alert-type-group {
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  min-width: 280px;
+}
+
+.alert-type-group legend {
+  color: var(--muted);
+  padding: 0 0.3rem;
+  font-size: 0.9rem;
+}
+
+.checkbox-inline {
+  display: inline-flex;
+  align-items: center;
+  flex-direction: row;
+  gap: 0.4rem;
+  color: var(--text);
+}
+
 label {
   display: flex;
   flex-direction: column;
