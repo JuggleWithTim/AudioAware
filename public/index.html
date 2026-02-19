@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>StreamListen</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header>
+        <h1>StreamListen</h1>
+        <p class="subtitle">Live Twitch audio health dashboard</p>
+      </header>
+
+      <section class="card">
+        <h2>Live Monitor</h2>
+        <div class="row">
+          <label>
+            Channel
+            <input id="liveChannel" type="text" placeholder="e.g. shroud" />
+          </label>
+          <label>
+            Quality
+            <input id="liveQuality" type="text" value="best" />
+          </label>
+          <label>
+            Twitch chat alerts
+            <input id="chatEnabled" type="checkbox" />
+          </label>
+          <label>
+            Chat channel
+            <input id="chatChannel" type="text" placeholder="defaults to channel" />
+          </label>
+        </div>
+        <div class="row">
+          <button id="startLiveBtn">Start Live Monitoring</button>
+          <button id="stopLiveBtn" class="danger">Stop</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Threshold Settings</h2>
+        <div class="row">
+          <label>
+            Silence RMS (dB)
+            <input id="silenceRmsDb" type="number" value="-50" />
+          </label>
+          <label>
+            Low RMS (dB)
+            <input id="lowRmsDb" type="number" value="-30" />
+          </label>
+          <label>
+            Clipping Peak (dB)
+            <input id="clipPeakDb" type="number" value="-1" />
+          </label>
+          <label>
+            Window (ms)
+            <input id="windowMs" type="number" value="500" />
+          </label>
+        </div>
+        <div class="row">
+          <label>
+            Silence min sec
+            <input id="silenceMinSec" type="number" value="3" />
+          </label>
+          <label>
+            Low min sec
+            <input id="lowMinSec" type="number" value="5" />
+          </label>
+          <label>
+            Clipping hits
+            <input id="clippingHits" type="number" value="3" />
+          </label>
+          <label>
+            Recovery sec
+            <input id="recoverySec" type="number" value="2" />
+          </label>
+          <label>
+            Cooldown sec
+            <input id="cooldownSec" type="number" value="30" />
+          </label>
+        </div>
+      </section>
+
+      <section class="card stats">
+        <h2>Current Audio Status</h2>
+        <div class="stat-grid">
+          <div><strong>Status:</strong> <span id="statusBadge" class="badge ok">OK</span></div>
+          <div><strong>RMS:</strong> <span id="rmsDb">-</span> dBFS</div>
+          <div><strong>Peak:</strong> <span id="peakDb">-</span> dBFS</div>
+          <div><strong>Timestamp:</strong> <span id="tsSec">-</span> s</div>
+        </div>
+        <div class="meter-wrap">
+          <div id="meterFill" class="meter-fill"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Live Alerts</h2>
+        <ul id="liveAlerts" class="list"></ul>
+      </section>
+
+      <section class="card">
+        <h2>VOD Analysis</h2>
+        <div class="row">
+          <label>
+            VOD URL
+            <input id="vodUrl" type="text" placeholder="https://www.twitch.tv/videos/123456" />
+          </label>
+          <label>
+            Quality
+            <input id="vodQuality" type="text" value="best" />
+          </label>
+          <button id="analyzeVodBtn">Analyze VOD</button>
+        </div>
+        <div id="vodSummary" class="summary"></div>
+      </section>
+
+      <section class="card">
+        <h2>System Log</h2>
+        <ul id="systemLog" class="list"></ul>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+  </html>

@@ -1,0 +1,158 @@
+:root {
+  color-scheme: dark;
+  --bg: #11151a;
+  --card: #1b2128;
+  --text: #e8edf2;
+  --muted: #95a1ad;
+  --ok: #2ecc71;
+  --warn: #f39c12;
+  --critical: #e74c3c;
+  --border: #2a323b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+h1,
+h2 {
+  margin: 0 0 0.75rem;
+}
+
+.subtitle {
+  margin: 0 0 1rem;
+  color: var(--muted);
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: end;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+input,
+button {
+  font: inherit;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+}
+
+input[type="text"],
+input[type="number"] {
+  min-width: 180px;
+  background: #0f1317;
+  color: var(--text);
+  padding: 0.55rem 0.7rem;
+}
+
+input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+}
+
+button {
+  background: #3b82f6;
+  color: #fff;
+  padding: 0.55rem 0.9rem;
+  cursor: pointer;
+}
+
+button.danger {
+  background: #9f2d2d;
+}
+
+.stat-grid {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.badge.ok {
+  background: color-mix(in srgb, var(--ok) 30%, transparent);
+  color: var(--ok);
+}
+
+.badge.warning {
+  background: color-mix(in srgb, var(--warn) 30%, transparent);
+  color: var(--warn);
+}
+
+.badge.critical {
+  background: color-mix(in srgb, var(--critical) 30%, transparent);
+  color: var(--critical);
+}
+
+.meter-wrap {
+  width: 100%;
+  margin-top: 0.75rem;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #0f1317;
+  height: 14px;
+  border: 1px solid var(--border);
+}
+
+.meter-fill {
+  width: 0%;
+  height: 100%;
+  transition: width 0.2s ease;
+  background: linear-gradient(90deg, #2563eb, #22c55e, #f59e0b, #ef4444);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.list li {
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.55rem 0.65rem;
+  background: #11151a;
+}
+
+.summary {
+  margin-top: 0.75rem;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
