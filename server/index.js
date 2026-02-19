@@ -20,6 +20,7 @@ const wss = new WebSocketServer({ server });
 const notifier = new Notifier({ wss, env: process.env });
 
 const PORT = Number(process.env.PORT || 3030);
+const ALERT_TYPES = ["silent", "low", "clipping", "recovered"];
 
 let liveSession = null;
 
@@ -48,6 +49,13 @@ function mergeAlertSettings(input = {}) {
     recoverySec: num(input.recoverySec, DEFAULT_ALERT_SETTINGS.recoverySec),
     cooldownSec: num(input.cooldownSec, DEFAULT_ALERT_SETTINGS.cooldownSec),
   };
+}
+
+function normalizeAlertTypeSettings(input = {}) {
+  return ALERT_TYPES.reduce((acc, type) => {
+    acc[type] = input[type] !== false;
+    return acc;
+  }, {});
 }
 
 function summarize(metrics, alerts) {
@@ -124,6 +132,7 @@ app.post("/api/live/start", async (req, res) => {
     const alertEngine = new AlertEngine(alertSettings);
     const chatEnabled = Boolean(alerts.chatEnabled);
     const chatChannel = String(alerts.chatChannel || channel).replace(/^@/, "").trim();
+    const enabledTypes = normalizeAlertTypeSettings(alerts.enabledTypes);
 
     const runner = startFfmpegPcmStream({
       inputUrl: resolved.streamUrl,
@@ -134,7 +143,11 @@ app.post("/api/live/start", async (req, res) => {
           notifier.broadcast("metric", metric);
           const newAlerts = alertEngine.processMetric(metric);
           for (const alert of newAlerts) {
-            await notifier.notifyAlert(alert, { chatEnabled, chatChannel });
+            await notifier.notifyAlert(alert, {
+              chatEnabled,
+              chatChannel,
+              enabledTypes,
+            });
           }
         }
       },
@@ -163,6 +176,7 @@ app.post("/api/live/start", async (req, res) => {
       alertSettings,
       chatEnabled,
       chatChannel,
+      enabledTypes,
     });
   } catch (error) {
     return res.status(500).json({ error: error.message });

@@ -34,6 +34,27 @@
           </label>
         </div>
         <div class="row">
+          <fieldset class="alert-type-group">
+            <legend>Twitch alert types</legend>
+            <label class="checkbox-inline">
+              <input id="alertTypeSilent" type="checkbox" checked />
+              <span>Silent</span>
+            </label>
+            <label class="checkbox-inline">
+              <input id="alertTypeLow" type="checkbox" checked />
+              <span>Low</span>
+            </label>
+            <label class="checkbox-inline">
+              <input id="alertTypeClipping" type="checkbox" checked />
+              <span>Clipping</span>
+            </label>
+            <label class="checkbox-inline">
+              <input id="alertTypeRecovered" type="checkbox" checked />
+              <span>Recovered</span>
+            </label>
+          </fieldset>
+        </div>
+        <div class="row">
           <button id="startLiveBtn">Start Live Monitoring</button>
           <button id="stopLiveBtn" class="danger">Stop</button>
         </div>

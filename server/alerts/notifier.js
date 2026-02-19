@@ -52,6 +52,7 @@ class Notifier {
     this.broadcast("alert", alert);
 
     if (!opts.chatEnabled) return;
+    if (opts.enabledTypes && opts.enabledTypes[alert.type] === false) return;
     const channel = opts.chatChannel;
     const text = `[AudioAware] ${alert.message} @ ${alert.timestampSec.toFixed(1)}s`;
 
