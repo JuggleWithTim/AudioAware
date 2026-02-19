@@ -98,7 +98,7 @@ wss.on("connection", (socket) => {
     JSON.stringify({
       type: "system",
       at: new Date().toISOString(),
-      payload: { level: "info", message: "Connected to StreamListen server" },
+      payload: { level: "info", message: "Connected to AudioAware server" },
     })
   );
 });
@@ -220,5 +220,5 @@ app.post("/api/vod/analyze", async (req, res) => {
 
 server.listen(PORT, () => {
   // eslint-disable-next-line no-console
-  console.log(`StreamListen running at http://localhost:${PORT}`);
+  console.log(`AudioAware running at http://localhost:${PORT}`);
 });

@@ -53,7 +53,7 @@ class Notifier {
 
     if (!opts.chatEnabled) return;
     const channel = opts.chatChannel;
-    const text = `[StreamListen] ${alert.message} @ ${alert.timestampSec.toFixed(1)}s`;
+    const text = `[AudioAware] ${alert.message} @ ${alert.timestampSec.toFixed(1)}s`;
 
     try {
       await this.sendChatAlert({ channel, message: text });
